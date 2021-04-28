@@ -2,6 +2,6 @@
 
 int main()
 {
-	/* code */
+	printf("Hello GitHub\n");
 	return 0;
 }
