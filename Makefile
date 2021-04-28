@@ -4,11 +4,13 @@ SERVER_EXE=server
 CLIENT_EXE=subscriber
 CFLAGS=-Wall -Wextra -g -o
 CC=gcc
+HEADER=tools.h
+ADDITIONAL_SRCS=common_funcs.c
 
-server:
+server: $(SERVER_SOURCE_CODE) $(HEADER) $(ADDITIONAL_SRCS)
 	$(CC) $(SERVER_SOURCE_CODE) $(CFLAGS) $(SERVER_EXE)
 
-subscriber:
+subscriber: $(CLIENT_SOURCE_CODE) $(HEADER) $(ADDITIONAL_SRCS)
 	$(CC) $(CLIENT_SOURCE_CODE) $(CFLAGS) $(CLIENT_EXE)
 
 clean:

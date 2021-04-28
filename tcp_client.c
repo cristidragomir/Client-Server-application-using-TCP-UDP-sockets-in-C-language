@@ -1,11 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
-#include "aux_macro.h"
+#include "tools.h"
 
-int main()
+int main(int argc, char *argv[])
 {
-	FILE *in = fopen("blabla.txt","rt");
-	DIE(in == NULL, "Fisierul nu a fost gasit");
+	setvbuf(stdout, NULL, _IONBF, BUFSIZ);
+	DIE (argc < 3, "Argumente insuficiente pentru client");
 	return 0;
 }
