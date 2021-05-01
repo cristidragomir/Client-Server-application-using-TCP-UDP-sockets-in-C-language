@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -16,8 +17,9 @@ void control_inp_srcs(fd_set *inputs,
 	DIE(incoming_client == NULL, "Eroare alocare memorie");
 	if (inp_index == server_socket) {
 		// In acest caz incercam sa primim noi conexiuni catre server
-		new_sock = accept(server_socket, incoming_client);
-		DIE(incoming_client < 0, "Eroare acceptare conexiune noua");
+		socklen_t inc_client_size = SOCKADDR_IN_SIZE;
+		new_sock = accept(server_socket, (struct sockaddr *)incoming_client, &inc_client_size);
+		DIE(new_sock < 0, "Eroare acceptare conexiune noua");
 		// Am acceptat o noua conexiune la acest server
 		FD_SET(new_sock, inputs);
 		if (new_sock > *max_input_rank) {
@@ -46,9 +48,9 @@ int main(int argc, char *argv[])
 	struct sockaddr_in *server_details;
 	server_details = calloc(1, SOCKADDR_IN_SIZE);
 	DIE(server_details == NULL, "Eroare alocare memorie");
-	server_details.sin_family = AF_INET;
-	server_details.sin_port = htons((uint16_t)port);
-	server_details.sin_addr.s_addr = INADDR_ANY;
+	server_details->sin_family = AF_INET;
+	server_details->sin_port = htons((uint16_t)port);
+	server_details->sin_addr.s_addr = INADDR_ANY;
 	// Am completat detaliile header-ului de socket
 	// pentru ca acest program sa fie recunoscut ca server
 	int chk_ret;
@@ -70,24 +72,23 @@ int main(int argc, char *argv[])
 	FD_SET(tcp_sock_descr, inputs);
 	max_input_rank = tcp_sock_descr;
 	// Am initializat multimea de surse din care se poate citi
-	TCPClientsDB *tcp_clients = malloc(sizeof(TCPClientsDB));
+	struct TCPClientsDB *tcp_clients = init_clients_db();
 	// Am initializat baza de date a clientilor
 	while (TRUE_VAL) {
-		memcpy(prev_inputs, inputs, FD_SET_SIZE)
+		memcpy(prev_inputs, inputs, FD_SET_SIZE);
 
-		chk_ret = select(max_input_rank + 1, &prev_inputs, NULL, NULL, NULL);
+		chk_ret = select(max_input_rank + 1, prev_inputs, NULL, NULL, NULL);
 		DIE(chk_ret < 0, "Eroare la selectia sursei de input");
 
-		for (i = 0; i <= max_input_rank; i++) {
+		for (int i = 0; i <= max_input_rank; i++) {
 			if (FD_ISSET(i, prev_inputs)) {
-				control_inp_srcs(fd_set inputs,
-								 fd_set prev_inputs,
+				control_inp_srcs(inputs, prev_inputs,
 								 &max_input_rank, i,
 								 tcp_sock_descr);
 			}
 		}
 	}
 	close(tcp_sock_descr);
-	// Socketul a fost inchis
+	// Socketul serverului a fost inchis
 	return 0;
 }

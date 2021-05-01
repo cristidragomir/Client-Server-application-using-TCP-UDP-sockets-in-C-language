@@ -21,22 +21,19 @@
 		}									\
 	} while(0)
 
-typedef struct TCPClient
-{
-	int8_t is_connected;
-	char id[ID_CLIENT_LEN];	
+struct TCPClientsDB {
+	uint32_t capacity;
+	uint32_t cnt;
+	struct Client_info *cls;
 };
 
-typedef struct TCPClientsDB {	
-	uint32_t capacity = INIT_CLIENTS_NUM;
-	uint32_t cnt = 0;
-	TCPClient *info = malloc(capacity * sizeof(TCPClient));
-};
-
-typedef struct Client_info {
+struct Client_info {
 	char id[ID_CLIENT_LEN];
+	int8_t is_connected;
 	char *ip;
 	uint16_t port;
 };
 
 void disable_neagle_algorithm(int socket);
+struct TCPClientsDB *init_clients_db();
+void display_type_1_msg(char *buffer);
