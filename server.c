@@ -9,6 +9,21 @@
 
 #include "tools.h"
 
+void disconnect_all_cls(struct TCPClientsDB *tcp_clients, fd_set *inputs) {
+	char *response = calloc(PAYLOAD_LEN, sizeof(char));
+	DIE(response == NULL, "Eroare alocare memorie");
+	response[0] = 'E';
+	for (uint32_t i = 0; i < tcp_clients->cnt; i++) {
+		int chk_func;
+		chk_func = send(tcp_clients->cls[i].socket, response, PAYLOAD_LEN, 0);
+		DIE(chk_func < 0, "Eroare trimitere informatii");
+		tcp_clients->cls[i].is_connected = '0';
+		close(tcp_clients->cls[i].socket);
+		FD_CLR(i, inputs);
+	}
+	free(response);
+}
+
 void duplicate_id(char *sock_id_corresp, int inp_index, 
 	struct TCPClientsDB *tcp_clients, fd_set *inputs) {
 	
@@ -22,6 +37,7 @@ void duplicate_id(char *sock_id_corresp, int inp_index,
 	DIE(chk_func < 0, "Eroare trimitere informatii");
 	close(inp_index);
 	FD_CLR(inp_index, inputs);
+	free(response);
 }
 
 void recv_cl_id(int inp_index, struct TCPClientsDB *tcp_clients, 
@@ -40,8 +56,18 @@ void recv_cl_id(int inp_index, struct TCPClientsDB *tcp_clients,
 		if (cl_index != i && 
 			memcmp(tcp_clients->cls[i].id, 
 				sock_id_corresp, cl_id_len) == 0) {
-			
-			duplicate_id(sock_id_corresp, inp_index, tcp_clients, inputs);
+			if (tcp_clients->cls[i].is_connected == '1') {
+				// Un alt client incearca sa se conecteze cu acelasi ID
+				// al altui client deja conectat
+				duplicate_id(sock_id_corresp, inp_index, tcp_clients, inputs);
+			} else {
+				// Clientul s-a conectat o data pe server 
+				// si incearca sa se reconecteze
+				tcp_clients->cnt--;
+				tcp_clients->cls[i].is_connected = '0';
+				tcp_clients->cls[i].port = tcp_clients->cls[cl_index].port;
+				tcp_clients->cls[i].ip = tcp_clients->cls[cl_index].ip;
+			}
 			return;
 		}
 	}
@@ -148,20 +174,23 @@ int main(int argc, char *argv[])
 	FD_ZERO(inputs);
 	FD_ZERO(prev_inputs);
 	FD_SET(tcp_sock_descr, inputs);
+	FD_SET(0, inputs);
 	max_input_rank = tcp_sock_descr;
 	// Am initializat multimea de surse din care se poate citi
 	struct TCPClientsDB *tcp_clients = init_clients_db();
 	// Am initializat baza de date a clientilor
+	// free(server_details);
 	while (TRUE_VAL) {
 		memcpy(prev_inputs, inputs, FD_SET_SIZE);
 
 		chk_ret = select(max_input_rank + 1, prev_inputs, NULL, NULL, NULL);
 		DIE(chk_ret < 0, "Eroare la selectia sursei de input");
-		if (FD_ISSET(i, prev_inputs)) {
-			char *buffer = malloc(PAYLOAD_LEN * sizeof(char));
-			fgets(buffer, PAYLOAD_LEN, stdin);
+		if (FD_ISSET(0, prev_inputs)) {
+			// Serverul citeste informatii de la tastatura
+			char *buffer = calloc(PAYLOAD_LEN, sizeof(char));
+			fgets(buffer, PAYLOAD_LEN - 1, stdin);
 			if (strncmp(buffer, "exit", 4) == 0) {
-				disconnect_all_cls(tcp_cls);
+				disconnect_all_cls(tcp_clients, inputs);
 				break;
 			}
 			free(buffer);
@@ -172,8 +201,14 @@ int main(int argc, char *argv[])
 								 tcp_sock_descr, tcp_clients);
 			}
 		}
+		
 	}
+	free(tcp_clients->cls);
+	free(tcp_clients);
+	free(inputs);
+	free(prev_inputs);
 	close(tcp_sock_descr);
+	// # problema cu inchiderea tuturor comunicatiilor si a deschiderii lor imediate #
 	// Socketul serverului a fost inchis
 	return 0;
 }

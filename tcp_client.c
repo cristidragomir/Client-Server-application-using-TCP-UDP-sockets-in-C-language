@@ -98,6 +98,8 @@ int main(int argc, char *argv[])
 			}
 		}
 	}
+	FD_CLR(tcp_sock_descr, inputs);
+	FD_CLR(0, inputs);
 	close(tcp_sock_descr);
 	// Am inchis socket-ul clientului
 	return 0;
