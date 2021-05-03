@@ -157,8 +157,16 @@ int main(int argc, char *argv[])
 
 		chk_ret = select(max_input_rank + 1, prev_inputs, NULL, NULL, NULL);
 		DIE(chk_ret < 0, "Eroare la selectia sursei de input");
-
-		for (int i = 0; i <= max_input_rank; i++) {
+		if (FD_ISSET(i, prev_inputs)) {
+			char *buffer = malloc(PAYLOAD_LEN * sizeof(char));
+			fgets(buffer, PAYLOAD_LEN, stdin);
+			if (strncmp(buffer, "exit", 4) == 0) {
+				disconnect_all_cls(tcp_cls);
+				break;
+			}
+			free(buffer);
+		}
+		for (int i = 1; i <= max_input_rank; i++) {
 			if (FD_ISSET(i, prev_inputs)) {
 				control_inp_srcs(inputs, &max_input_rank, i,
 								 tcp_sock_descr, tcp_clients);
