@@ -7,9 +7,10 @@
 #define SOCKADDR_IN_SIZE sizeof(struct sockaddr_in)
 #define FD_SET_SIZE sizeof(fd_set)
 #define TRUE_VAL 1
-#define ID_CLIENT_LEN 10
+#define ID_CLIENT_LEN 11
 #define INIT_CLIENTS_NUM 32
 #define PAYLOAD_LEN 1500
+#define EXIT_CODE 1
 
 #define DIE(assertion, call_description)	\
 	do {									\
@@ -30,8 +31,9 @@ struct TCPClientsDB {
 struct Client_info {
 	char id[ID_CLIENT_LEN];
 	int8_t is_connected;
-	char *ip;
+	int socket;
 	uint16_t port;
+	uint32_t ip;
 };
 
 void disable_neagle_algorithm(int socket);

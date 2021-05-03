@@ -31,11 +31,4 @@ struct TCPClientsDB *init_clients_db() {
 void display_type_1_msg(char *buffer) {
 	printf("TIP MSJ: %c\n", buffer[0]);
 	printf("ID_CLIENT: %s\n", buffer + sizeof(char));
-	uint16_t test_port;
-	memcpy(&test_port, buffer + sizeof(char) + ID_CLIENT_LEN + 1, sizeof(uint16_t));
-	test_port = ntohs(test_port);
-	printf("PORT: %hu\n", test_port);
-	struct in_addr test_ip;
-	memcpy(&test_ip.s_addr, (buffer + sizeof(char) + ID_CLIENT_LEN + 1 + sizeof(unsigned short)), sizeof(uint32_t));
-	printf("IPv4: %s\n", inet_ntoa(test_ip));
 } 

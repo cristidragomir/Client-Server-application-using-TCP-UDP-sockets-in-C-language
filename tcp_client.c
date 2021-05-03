@@ -9,18 +9,38 @@
 
 #include "tools.h"
 
-void send_client_id(int to_send_sock, char *client_id, struct sockaddr_in *client_details) {
+void send_client_id(int to_send_sock, char *client_id) {
+	int chk_func;
 	char *buffer = calloc(PAYLOAD_LEN, sizeof(char));
 	char msg_type = '1';
 	memcpy(buffer, &msg_type, sizeof(char));
 	memcpy(buffer + sizeof(char), client_id, ID_CLIENT_LEN);
-	memcpy(buffer + sizeof(char) + ID_CLIENT_LEN + 1, &client_details->sin_port, 
-		sizeof(unsigned short));
-	memcpy(buffer + sizeof(char) + ID_CLIENT_LEN + 1 + sizeof(unsigned short),
-		&client_details->sin_addr.s_addr,
-		sizeof(unsigned long));
 	display_type_1_msg(buffer);
-	send(to_send_sock, buffer, PAYLOAD_LEN, 0);
+	chk_func = send(to_send_sock, buffer, PAYLOAD_LEN, 0);
+	DIE(chk_func < 0, "Eroare trimitere informatii");
+}
+
+int read_stdin() {
+	char *buffer = calloc(PAYLOAD_LEN, sizeof(char));
+	fgets(buffer, PAYLOAD_LEN - 1, stdin);
+
+	if (strncmp(buffer, "exit", 4) == 0) {
+		return EXIT_CODE;
+	}
+	free(buffer);
+	return 0;
+}
+
+int read_server(int socket) {
+	char *buffer = calloc(PAYLOAD_LEN, sizeof(char));
+	int chk_func;
+	chk_func = recv(socket, buffer, PAYLOAD_LEN, 0);
+	DIE(chk_func < 0, "Eroare receptie informatii");
+	if (buffer[0] == 'E') {
+		return EXIT_CODE;
+	}
+	free(buffer);
+	return 0;
 }
 
 int main(int argc, char *argv[])
@@ -31,6 +51,7 @@ int main(int argc, char *argv[])
 	int tcp_sock_descr = socket(AF_INET, SOCK_STREAM, 0);
 	DIE(tcp_sock_descr < 0, "Eroare initializare socket");
 	// Am initializat socket-ul clientului TCP
+	disable_neagle_algorithm(tcp_sock_descr);
 	int port = atoi(argv[3]);
 	DIE((port > MAX_PORT || port < MIN_PORT), "Port invalid");
 	// Am prelucrat portul dat ca parametru
@@ -58,9 +79,26 @@ int main(int argc, char *argv[])
 	chk_ret = connect(tcp_sock_descr, 
 		(struct sockaddr *)client_details, SOCKADDR_IN_SIZE);
 	DIE(chk_ret < 0, "Eroare la conectarea cu serverul");
-	send_client_id(tcp_sock_descr, argv[1], client_details);
+	send_client_id(tcp_sock_descr, argv[1]);
 	while (TRUE_VAL) {
-		
+		memcpy(prev_inputs, inputs, FD_SET_SIZE);
+
+		chk_ret = select(max_input_rank + 1, prev_inputs, NULL, NULL, NULL);
+		DIE(chk_ret < 0, "Eroare la selectia sursei de input");
+		if (FD_ISSET(0, prev_inputs)) {
+		// Se citeste de la tastatura
+			if (read_stdin() == EXIT_CODE) {
+				// Clientul se va inchide
+				break;
+			}
+		} else {
+			if (read_server(tcp_sock_descr) == EXIT_CODE) {
+				// Serverul se va inchide si, deci, se inchide si clientul
+				break;
+			}
+		}
 	}
+	close(tcp_sock_descr);
+	// Am inchis socket-ul clientului
 	return 0;
 }
