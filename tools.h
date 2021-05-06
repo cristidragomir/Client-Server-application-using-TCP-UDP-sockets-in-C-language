@@ -36,6 +36,12 @@ struct Client_info {
 	uint32_t ip;
 };
 
+struct TCPmsg {
+	char type;
+	char client_id[ID_CLIENT_LEN];
+};
+
 void disable_neagle_algorithm(int socket);
 struct TCPClientsDB *init_clients_db();
+int parse_message(struct TCPmsg *msg_recv, char *buffer);
 void display_type_1_msg(char *buffer);
