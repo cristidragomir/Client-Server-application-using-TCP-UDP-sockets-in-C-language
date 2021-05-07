@@ -11,19 +11,18 @@
 
 void send_client_id(int to_send_sock, char *client_id) {
 	int chk_func;
-	char *buffer = calloc(PAYLOAD_LEN, sizeof(char));
+	char *buffer = calloc(PAYLOAD_LEN, CHAR_SIZE);
 	char msg_type = '1';
-	memcpy(buffer, &msg_type, sizeof(char));
-	memcpy(buffer + sizeof(char), client_id, ID_CLIENT_LEN);
+	memcpy(buffer, &msg_type, CHAR_SIZE);
+	memcpy(buffer + CHAR_SIZE, client_id, ID_CLIENT_LEN);
 	display_type_1_msg(buffer);
 	chk_func = send(to_send_sock, buffer, PAYLOAD_LEN, 0);
 	DIE(chk_func < 0, "Eroare trimitere informatii");
 }
 
 int read_stdin() {
-	char *buffer = calloc(PAYLOAD_LEN, sizeof(char));
+	char *buffer = calloc(PAYLOAD_LEN, CHAR_SIZE);
 	fgets(buffer, PAYLOAD_LEN - 1, stdin);
-
 	if (strncmp(buffer, "exit", 4) == 0) {
 		return EXIT_CODE;
 	}
@@ -32,11 +31,13 @@ int read_stdin() {
 }
 
 int read_server(int socket) {
-	char *buffer = calloc(PAYLOAD_LEN, sizeof(char));
+	char *buffer = calloc(PAYLOAD_LEN, CHAR_SIZE);
 	int chk_func;
 	chk_func = recv(socket, buffer, PAYLOAD_LEN, 0);
 	DIE(chk_func < 0, "Eroare receptie informatii");
-	if (buffer[0] == 'E') {
+	struct TCPmsg rec_msg;
+	DIE(parse_message_tcp(&rec_msg, buffer) < 0, "Eroare parsare buffer");
+	if (rec_msg.type == 'E') {
 		return EXIT_CODE;
 	}
 	free(buffer);

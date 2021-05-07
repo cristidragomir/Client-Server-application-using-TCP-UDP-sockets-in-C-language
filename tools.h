@@ -9,8 +9,13 @@
 #define TRUE_VAL 1
 #define ID_CLIENT_LEN 11
 #define INIT_CLIENTS_NUM 32
-#define PAYLOAD_LEN 1500
+#define PAYLOAD_LEN 1552
+// 51 + 1 + 1501 - pentru UDP
+#define TOPIC_LEN 51
+#define CONTENT_LEN 1501
+#define CHAR_SIZE sizeof(char)
 #define EXIT_CODE 1
+#define POW_OF_10 100
 
 #define DIE(assertion, call_description)	\
 	do {									\
@@ -41,7 +46,15 @@ struct TCPmsg {
 	char client_id[ID_CLIENT_LEN];
 };
 
+struct UDPmsg {
+	char topic[TOPIC_LEN];
+	char type;
+	char content[CONTENT_LEN];
+};
+
 void disable_neagle_algorithm(int socket);
 struct TCPClientsDB *init_clients_db();
-int parse_message(struct TCPmsg *msg_recv, char *buffer);
+int parse_message_tcp(struct TCPmsg *msg_recv, char *buffer);
+int parse_message_udp(struct UDPmsg *msg_recv, char *buffer);
 void display_type_1_msg(char *buffer);
+void display_udp_msg(struct UDPmsg *recv_msg);

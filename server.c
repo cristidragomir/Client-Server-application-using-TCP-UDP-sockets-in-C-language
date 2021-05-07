@@ -10,7 +10,7 @@
 #include "tools.h"
 
 void disconnect_all_cls(struct TCPClientsDB *tcp_clients, fd_set *inputs) {
-	char *response = calloc(PAYLOAD_LEN, sizeof(char));
+	char *response = calloc(PAYLOAD_LEN, CHAR_SIZE);
 	DIE(response == NULL, "Eroare alocare memorie");
 	response[0] = 'E';
 	for (uint32_t i = 0; i < tcp_clients->cnt; i++) {
@@ -31,7 +31,7 @@ void duplicate_id(char *sock_id_corresp, int inp_index,
 	
 	printf("Client %s already connected\n", sock_id_corresp);
 	tcp_clients->cnt--;
-	char *response = calloc(PAYLOAD_LEN, sizeof(char));
+	char *response = calloc(PAYLOAD_LEN, CHAR_SIZE);
 	DIE(response == NULL, "Eroare alocare memorie");
 	response[0] = 'E';
 	int chk_func;
@@ -90,7 +90,7 @@ void control_inp_srcs_tcp(fd_set *inputs,
 	struct TCPClientsDB *tcp_clients) {
 
 	int new_sock, chk_func;
-	char *buffer = calloc(PAYLOAD_LEN, sizeof(char));
+	char *buffer = calloc(PAYLOAD_LEN, CHAR_SIZE);
 	struct sockaddr_in *incoming_client = malloc(SOCKADDR_IN_SIZE);
 	DIE(incoming_client == NULL, "Eroare alocare memorie");
 	if (inp_index == server_tcp_socket) {
@@ -113,9 +113,16 @@ void control_inp_srcs_tcp(fd_set *inputs,
 		tcp_clients->cls[tcp_clients->cnt].port = incoming_client->sin_port;
 		tcp_clients->cls[tcp_clients->cnt].ip = incoming_client->sin_addr.s_addr;
 		tcp_clients->cnt++;
+		// S-a adaugat un nou client in baza noastra de date
 	} else if (inp_index == server_udp_socket) {
 		// In acest caz se primesc informatii de la clientii UDP
-		
+		struct sockaddr_in sender_details;
+		unsigned int *sender_details_len = malloc(sizeof(unsigned int));
+		chk_func = recvfrom(inp_index, buffer, PAYLOAD_LEN, 0,
+			(struct sockaddr *) &sender_details, sender_details_len);
+		struct UDPmsg recv_msg;
+		DIE(parse_message_udp(&recv_msg, buffer) < 0, "Eroare parsare mesaj");
+		display_udp_msg(&recv_msg);
 	} else {
 		// De la o conexiune deja stabilita primim informatii
 		chk_func = recv(inp_index, buffer, PAYLOAD_LEN, 0);
@@ -137,7 +144,7 @@ void control_inp_srcs_tcp(fd_set *inputs,
 		} else {
 			// Clientul trimite informatii catre server
 			struct TCPmsg rec_msg;
-			DIE(parse_message(&rec_msg, buffer) < 0, "Eroare de parsare a bufferului");
+			DIE(parse_message_tcp(&rec_msg, buffer) < 0, "Eroare de parsare a bufferului");
 			if (rec_msg.type == '1') {
 				// Un client si-a trimis ID-ul
 				recv_cl_id(inp_index, tcp_clients, &rec_msg, inputs);
@@ -159,8 +166,10 @@ void control_inp_srcs_tcp(fd_set *inputs,
 }
 
 void server_common_config(int *socket, char *port_arg, int tcp_sock_type) {
-	disable_neagle_algorithm(*socket);
-	// Am dezactivat algoritmul lui Neagle
+	if (tcp_sock_type == 1) {
+		disable_neagle_algorithm(*socket);
+		// Am dezactivat algoritmul lui Neagle
+	}
 	int port = atoi(port_arg);
 	DIE((port > MAX_PORT || port < MIN_PORT), "Port invalid");
 	// Am parsat ca numar portul dat ca parametru programului
@@ -227,10 +236,10 @@ int main(int argc, char *argv[])
 {
 	setvbuf(stdout, NULL, _IONBF, BUFSIZ);
 	DIE (argc < 2, "Argumente insuficiente pentru server");
-	int tcp_sock_descr;
-	int udp_sock_descr;
+	int tcp_sock_descr, udp_sock_descr;
 	configure_server_tcp(&tcp_sock_descr, argv[1]);
 	configure_server_udp(&udp_sock_descr, argv[1]);
+	// Configurare server pentru TCP si UDP
 	fd_set *inputs, *prev_inputs;
 	int max_input_rank;
 	configure_fd_sets(udp_sock_descr, tcp_sock_descr, &inputs, &prev_inputs, &max_input_rank);
@@ -239,14 +248,13 @@ int main(int argc, char *argv[])
 	// Am initializat baza de date a clientilor
 	int chk_ret;
 	while (TRUE_VAL) {
-
 		memcpy(prev_inputs, inputs, FD_SET_SIZE);
 		// Retinerea multimii de surse de citire initial
 		chk_ret = select(max_input_rank + 1, prev_inputs, NULL, NULL, NULL);
 		DIE(chk_ret < 0, "Eroare la selectia sursei de input");
 		if (FD_ISSET(0, prev_inputs)) {
 			// Serverul citeste informatii de la tastatura
-			char *buffer = calloc(PAYLOAD_LEN, sizeof(char));
+			char *buffer = calloc(PAYLOAD_LEN, CHAR_SIZE);
 			fgets(buffer, PAYLOAD_LEN - 1, stdin);
 			if (strncmp(buffer, "exit", 4) == 0) {
 				disconnect_all_cls(tcp_clients, inputs);
