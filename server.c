@@ -8,6 +8,8 @@
 #include <unistd.h>
 
 #include "tools.h"
+#include "list.h"
+#include "queue.h"
 
 void disconnect_all_cls(struct TCPClientsDB *tcp_clients, fd_set *inputs) {
 	char *response = calloc(PAYLOAD_LEN, CHAR_SIZE);
@@ -122,7 +124,7 @@ void control_inp_srcs_tcp(fd_set *inputs,
 			(struct sockaddr *) &sender_details, sender_details_len);
 		struct UDPmsg recv_msg;
 		DIE(parse_message_udp(&recv_msg, buffer) < 0, "Eroare parsare mesaj");
-		display_udp_msg(&recv_msg);
+		display_udp_msg(&recv_msg, &sender_details);
 	} else {
 		// De la o conexiune deja stabilita primim informatii
 		chk_func = recv(inp_index, buffer, PAYLOAD_LEN, 0);
@@ -142,23 +144,18 @@ void control_inp_srcs_tcp(fd_set *inputs,
 			close(inp_index);
 			FD_CLR(inp_index, inputs);
 		} else {
-			// Clientul trimite informatii catre server
+			// Clientul TCP trimite informatii catre server
 			struct TCPmsg rec_msg;
 			DIE(parse_message_tcp(&rec_msg, buffer) < 0, "Eroare de parsare a bufferului");
 			if (rec_msg.type == '1') {
-				// Un client si-a trimis ID-ul
+				// Un client TCP si-a trimis ID-ul
 				recv_cl_id(inp_index, tcp_clients, &rec_msg, inputs);
 			} else if (rec_msg.type == '2') {
-				// Un client a trimis o cerere de subscribe
-
-
-			
-			
+				// Un client TCP a trimis o cerere de subscribe
+				display_type_2_msg(&rec_msg);
 			} else if (rec_msg.type == '3') {
-				// Un client a trimit o cerere de unsubscribe
-			
-			
-			
+				// Un client TCP a trimit o cerere de unsubscribe
+				display_type_3_msg(&rec_msg);
 			}
 		}
 	}
@@ -194,7 +191,7 @@ void server_common_config(int *socket, char *port_arg, int tcp_sock_type) {
 	// Socket-ului i-a fost asociat un port
 	if (tcp_sock_type == 1) {
 		chk_ret = listen(*socket, MAX_PENDING_CONNECTIONS);
-		DIE(chk_ret < 0, "Configurarea socket-ului pentru ascultare esuata");
+		DIE(chk_ret < 0, "Configurarea socket-ului TCP pentru ascultare esuata");
 		// Serverul poate "asculta" cererile clientilor acum
 	}
 }
@@ -230,6 +227,18 @@ void configure_fd_sets(int socket1, int socket2, fd_set **inputs,
 	} else {
 		*max_input_rank = socket2;
 	}
+}
+
+void free_mem(struct TCPClientsDB *tcp_clients,
+	fd_set *inputs, fd_set *prev_inputs, int tcp_sock_descr,
+	int udp_sock_descr) {
+	free(tcp_clients->cls);
+	free(tcp_clients);
+	free(inputs);
+	free(prev_inputs);
+	close(tcp_sock_descr);
+	close(udp_sock_descr);
+	// Se elibereaza resursele utilizate de program
 }
 
 int main(int argc, char *argv[])
@@ -270,12 +279,7 @@ int main(int argc, char *argv[])
 			}
 		}	
 	}
-	free(tcp_clients->cls);
-	free(tcp_clients);
-	free(inputs);
-	free(prev_inputs);
-	close(tcp_sock_descr);
-	close(udp_sock_descr);
+	free_mem(tcp_clients, inputs, prev_inputs, tcp_sock_descr, udp_sock_descr);
 	// Socketul serverului a fost inchis
 	return 0;
 }

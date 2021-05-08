@@ -36,6 +36,15 @@ int parse_message_tcp(struct TCPmsg *msg_recv, char *buffer) {
 		msg_recv->client_id[actual_id_len] = '\0';
 		return 1;
 		// S-a procesat un mesaj TCP in care clientul isi trimite propriul ID
+	} else if (msg_recv->type == '2') {
+		uint32_t actual_topic_len = strlen(buffer + CHAR_SIZE);
+		memcpy(msg_recv->topic_to_sub_unsub, buffer + CHAR_SIZE, actual_topic_len + 1);
+		memcpy(&msg_recv->sf, buffer + CHAR_SIZE + TOPIC_LEN, CHAR_SIZE);
+		return 1;
+	} else if (msg_recv->type == '3') {
+		uint32_t actual_topic_len = strlen(buffer + CHAR_SIZE);
+		memcpy(msg_recv->topic_to_sub_unsub, buffer + CHAR_SIZE, actual_topic_len + 1);
+		return 1;
 	} else if (msg_recv->type == 'E') {
 		return 1;
 	}
@@ -80,17 +89,27 @@ void display_type_1_msg(char *buffer) {
 	printf("ID_CLIENT: %s\n", recv_msg.client_id);
 }
 
-void display_udp_msg(struct UDPmsg *recv_msg) {
-	printf("UDP TOPIC: %s\n", recv_msg->topic);
-	printf("UDP TYPE: %d\n", (int)recv_msg->type);
-	printf("UDP ");
+void display_type_2_msg(struct TCPmsg *rec_msg) {
+	printf("TCP TOPIC: %s\n", rec_msg->topic_to_sub_unsub);
+	printf("TCP SF: %d\n\n", (int)(rec_msg->sf) - '0');
+}
+
+void display_type_3_msg(struct TCPmsg *rec_msg) {
+	printf("TCP TOPIC: %s\n", rec_msg->topic_to_sub_unsub);
+}
+
+void display_udp_msg(struct UDPmsg *recv_msg, struct sockaddr_in *sender_details) {
+	struct in_addr aux;
+	aux.s_addr = sender_details->sin_addr.s_addr;
+	printf("%s:%hu - ", inet_ntoa(aux), ntohs(sender_details->sin_port));
+	printf("%s - ", recv_msg->topic);
 	switch ((uint32_t)recv_msg->type) {
 		case 0: ;
 		// nu merge sa fie pusa o declaratie de variabila imediat dupa un label
 			uint32_t number;
 			memcpy(&number, recv_msg->content + CHAR_SIZE, sizeof(uint32_t));
 			number = ntohl(number);
-			printf("INT: ");
+			printf("INT - ");
 			if (*recv_msg->content == 0) {
 				printf("%u\n", number);
 			} else {
@@ -99,15 +118,62 @@ void display_udp_msg(struct UDPmsg *recv_msg) {
 			break;
 		case 1: ;
 			uint16_t short_real;
-			memcpy(&short_real, recv_msg->content + CHAR_SIZE, sizeof(uint16_t));
-			printf("SHORT REAL: %hu", short_real);
-			//printf("SHORT_REAL: %hu.%hu", (uint16_t)(short_real / POW_OF_10), (uint16_t)(short_real % POW_OF_10));
+			memcpy(&short_real, recv_msg->content, sizeof(uint16_t));
+			short_real = ntohs(short_real);
+			printf("SHORT_REAL - %hu.", short_real / POW_OF_10);
+			uint16_t frac_part = short_real % POW_OF_10;
+			uint16_t digits_num = 1;
+			uint16_t pow_of_10 = 10;
+			while (frac_part >= pow_of_10) {
+				pow_of_10 *= 10;
+				digits_num++;
+			}
+			uint16_t complete_with_zero = 2 - digits_num;
+			while (complete_with_zero) {
+				complete_with_zero--;
+				printf("0");
+			}
+			printf("%hu\n", short_real % POW_OF_10);
 			break;
 		case 2: ;
-
+			uint32_t float_num;
+			memcpy(&float_num, recv_msg->content + CHAR_SIZE, sizeof(uint32_t));
+			float_num = ntohl(float_num);
+			int16_t pow_of_ten = 0;
+			memcpy(&pow_of_ten, recv_msg->content + 5 * CHAR_SIZE, sizeof(uint8_t));
+			printf("FLOAT - ");
+			if (*recv_msg->content != 0) {
+				printf("-");
+			}
+			if (pow_of_ten == 0) {
+				printf("%u\n", float_num);
+			} else {
+				char num_to_display[100];
+				uint32_t cnt = 0;
+				while(float_num) {
+					pow_of_ten--;
+					num_to_display[cnt++] = (float_num % 10) + '0';
+					if (pow_of_ten == 0) {
+						num_to_display[cnt++] = '.';
+					}
+					float_num /= 10;
+				}
+				while (pow_of_ten > 0) {
+					num_to_display[cnt++] = '0';
+					if (pow_of_ten == 1) {
+						num_to_display[cnt++] = '.';
+						num_to_display[cnt++] = '0';
+					}
+					pow_of_ten--;
+				}
+				for (int i = cnt - 1; i > -1 ; i--) {
+					printf("%c", num_to_display[i]);
+				}
+				printf("\n");
+			}
 			break;
 		case 3: ;
-			printf("UDP STRING: %s\n", recv_msg->content);
+			printf("STRING - %s\n", recv_msg->content);
 			break;
 	}
 	printf("\n");

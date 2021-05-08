@@ -9,22 +9,80 @@
 
 #include "tools.h"
 
-void send_client_id(int to_send_sock, char *client_id) {
+void send_tcp_msg(int to_send_sock, struct TCPmsg *tcp_msg) {
 	int chk_func;
 	char *buffer = calloc(PAYLOAD_LEN, CHAR_SIZE);
-	char msg_type = '1';
-	memcpy(buffer, &msg_type, CHAR_SIZE);
-	memcpy(buffer + CHAR_SIZE, client_id, ID_CLIENT_LEN);
-	display_type_1_msg(buffer);
+	memcpy(buffer, &(tcp_msg->type), CHAR_SIZE);
+	switch (tcp_msg->type) {
+		case '1':
+			memcpy(buffer + CHAR_SIZE, tcp_msg->client_id, ID_CLIENT_LEN);
+			break;
+		case '2':
+			memcpy(buffer + CHAR_SIZE, tcp_msg->topic_to_sub_unsub, TOPIC_LEN);
+			memcpy(buffer + CHAR_SIZE + TOPIC_LEN, &tcp_msg->sf, CHAR_SIZE);
+			break;
+		case '3':
+			memcpy(buffer + CHAR_SIZE, tcp_msg->topic_to_sub_unsub, TOPIC_LEN);
+	}
 	chk_func = send(to_send_sock, buffer, PAYLOAD_LEN, 0);
 	DIE(chk_func < 0, "Eroare trimitere informatii");
 }
 
-int read_stdin() {
+void send_client_id(int to_send_sock, char *client_id) {
+	struct TCPmsg *tcp_msg = malloc(sizeof(struct TCPmsg));
+	DIE(tcp_msg == NULL, "Eroare alocare memorie");
+	tcp_msg->type = '1';
+	memcpy(tcp_msg->client_id, client_id, strlen(client_id));
+	tcp_msg->client_id[strlen(client_id)] = '\0';
+	send_tcp_msg(to_send_sock, tcp_msg);
+	free(tcp_msg);
+}
+
+uint32_t set_msg_topic(struct TCPmsg *tcp_msg, char *relevant_info, char sep) {
+	uint32_t actual_topic_len = 0;
+	while (relevant_info[actual_topic_len] != sep) {
+		printf("%c", relevant_info[actual_topic_len]);
+		actual_topic_len++;
+	}
+	printf("\n");
+	DIE(actual_topic_len > 50, "Topic de lungime > 50");
+	memcpy(tcp_msg->topic_to_sub_unsub, relevant_info, actual_topic_len);
+	tcp_msg->topic_to_sub_unsub[actual_topic_len] = '\0';
+	return actual_topic_len;
+}
+
+void send_subscribe_req(int to_send_sock, char *relevant_info) {
+	struct TCPmsg *tcp_msg = malloc(sizeof(struct TCPmsg));
+	DIE(tcp_msg == NULL, "Eroare alocare memorie");
+	tcp_msg->type = '2';
+	uint32_t actual_topic_len = set_msg_topic(tcp_msg, relevant_info, ' ');
+	memcpy(&tcp_msg->sf, relevant_info + actual_topic_len + 1, CHAR_SIZE);
+	send_tcp_msg(to_send_sock, tcp_msg);
+	free(tcp_msg);
+}
+
+void send_unsub_req(int to_send_sock, char *relevant_info) {
+	struct TCPmsg *tcp_msg = malloc(sizeof(struct TCPmsg));
+	DIE(tcp_msg == NULL, "Eroare alocare memorie");
+	tcp_msg->type = '3';
+	set_msg_topic(tcp_msg, relevant_info, '\n');
+	send_tcp_msg(to_send_sock, tcp_msg);
+	free(tcp_msg);
+}
+
+int read_stdin(int to_send_sock) {
 	char *buffer = calloc(PAYLOAD_LEN, CHAR_SIZE);
 	fgets(buffer, PAYLOAD_LEN - 1, stdin);
-	if (strncmp(buffer, "exit", 4) == 0) {
+	if (!strncmp(buffer, "exit", 4)) {
+		// User-ul a dat comanda "exit" la terminal
+		free(buffer);
 		return EXIT_CODE;
+	} else if (!strncmp(buffer, "subscribe", strlen("subscribe"))) {
+		// User-ul a dat comanda de abonare la un topic
+		send_subscribe_req(to_send_sock, buffer + strlen("subscribe") + 1);
+	} else if (!strncmp(buffer, "unsubscribe", strlen("unsubscribe"))) {
+		// User-ul a dat comanda de dezabonare de la un topic
+		send_unsub_req(to_send_sock, buffer + strlen("unsubscribe") + 1);
 	}
 	free(buffer);
 	return 0;
@@ -88,7 +146,7 @@ int main(int argc, char *argv[])
 		DIE(chk_ret < 0, "Eroare la selectia sursei de input");
 		if (FD_ISSET(0, prev_inputs)) {
 		// Se citeste de la tastatura
-			if (read_stdin() == EXIT_CODE) {
+			if (read_stdin(tcp_sock_descr) == EXIT_CODE) {
 				// Clientul se va inchide
 				break;
 			}

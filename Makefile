@@ -5,7 +5,7 @@ CLIENT_EXE=subscriber
 CFLAGS=-Wall -Wextra -g -o
 CC=gcc
 HEADER=tools.h
-ADDITIONAL_SRCS=common_funcs.c
+ADDITIONAL_SRCS=common_funcs.c list.c queue.c
 
 server: $(SERVER_SOURCE_CODE) $(HEADER) $(ADDITIONAL_SRCS)
 	$(CC) $(SERVER_SOURCE_CODE) $(ADDITIONAL_SRCS) $(CFLAGS) $(SERVER_EXE)
