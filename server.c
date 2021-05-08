@@ -44,16 +44,23 @@ void duplicate_id(char *sock_id_corresp, int inp_index,
 	free(response);
 }
 
-void recv_cl_id(int inp_index, struct TCPClientsDB *tcp_clients, 
-	struct TCPmsg *rec_msg, fd_set *inputs) {
+uint32_t find_client_by_socket(int inp_index, 
+	struct TCPClientsDB *tcp_clients) {
+	
 	uint32_t cl_index;
-	// Se cauta indexul clientului al carui id trebuie completat
 	for (uint32_t i = 0; i < tcp_clients->cnt; i++) {
 		if (inp_index == tcp_clients->cls[i].socket) {
 			cl_index = i;
 			break;
 		}
 	}
+	return cl_index;
+}
+
+void recv_cl_id(int inp_index, struct TCPClientsDB *tcp_clients, 
+	struct TCPmsg *rec_msg, fd_set *inputs) {
+	uint32_t cl_index = find_client_by_socket(inp_index, tcp_clients);
+	// Se cauta indexul clientului al carui id trebuie completat
 	char *sock_id_corresp = rec_msg->client_id;
 	// Se preia id-ul trimis in buffer
 	uint32_t cl_id_len = strlen(sock_id_corresp);
@@ -86,10 +93,68 @@ void recv_cl_id(int inp_index, struct TCPClientsDB *tcp_clients,
 	// Se afiseaza detaliile de conectare
 }
 
+void print_topics_cls_list(list *topics_cls_list) {
+	list curr = *topics_cls_list;
+	while (curr) {
+		printf("%s:", ((struct topics_cls *)curr->element)->topic);
+		list subbers = ((struct topics_cls *)curr->element)->subs;
+		while (subbers) {
+			printf("%s ", ((struct Client_info *)subbers->element)->id);
+			subbers = subbers->next;
+		}
+		curr = curr->next;
+		printf("\n");	
+	}
+	printf("\n");
+}
+
+void add_subscription(struct TCPmsg *rec_msg, int inp_index, struct TCPClientsDB *tcp_clients,
+	list *topics_cls_list) {
+	// Adaugam la tabela de dispersie, la o anumita cheie(nume topic), un nou client(struct Client_info)
+	uint32_t cl_index = find_client_by_socket(inp_index, tcp_clients);
+	list curr, next_el;
+	curr = *topics_cls_list;
+	if (curr == NULL) {
+		*topics_cls_list = cons(malloc(sizeof(struct topics_cls)), *topics_cls_list);
+		curr = *topics_cls_list;
+		((struct topics_cls *)(curr->element))->subs = NULL;
+		memcpy(((struct topics_cls *)(curr->element))->topic,
+			rec_msg->topic_to_sub_unsub, 
+			strlen(rec_msg->topic_to_sub_unsub) + 1);
+	} else {
+		next_el = curr->next;
+		while (next_el != NULL) {
+			if (!memcmp(((struct topics_cls *)(curr->element))->topic, 
+				rec_msg->topic_to_sub_unsub, 
+				strlen(rec_msg->topic_to_sub_unsub))) {
+				break;
+			}
+			curr = next_el;
+			next_el = next_el->next;
+		}
+		if (next_el == NULL) {
+			if (memcmp(((struct topics_cls *)(curr->element))->topic, 
+				rec_msg->topic_to_sub_unsub, 
+				strlen(rec_msg->topic_to_sub_unsub))) {
+				// Trebuie creat un nou topic la care clientii se pot abona
+				*topics_cls_list = cons(malloc(sizeof(struct topics_cls)), *topics_cls_list);
+				curr = *topics_cls_list;
+				((struct topics_cls *)(curr->element))->subs = NULL;
+				memcpy(((struct topics_cls *)(curr->element))->topic,
+					rec_msg->topic_to_sub_unsub,
+					strlen(rec_msg->topic_to_sub_unsub) + 1);
+			}
+		}
+	}
+	((struct topics_cls *)(curr->element))->subs = 
+		cons(&(tcp_clients->cls[cl_index]), ((struct topics_cls *)(curr->element))->subs);
+	print_topics_cls_list(topics_cls_list);
+}
+
 void control_inp_srcs_tcp(fd_set *inputs, 
 	int *max_input_rank, int inp_index, 
 	int server_tcp_socket, int server_udp_socket, 
-	struct TCPClientsDB *tcp_clients) {
+	struct TCPClientsDB *tcp_clients, list *topics_cls_list) {
 
 	int new_sock, chk_func;
 	char *buffer = calloc(PAYLOAD_LEN, CHAR_SIZE);
@@ -152,7 +217,8 @@ void control_inp_srcs_tcp(fd_set *inputs,
 				recv_cl_id(inp_index, tcp_clients, &rec_msg, inputs);
 			} else if (rec_msg.type == '2') {
 				// Un client TCP a trimis o cerere de subscribe
-				display_type_2_msg(&rec_msg);
+				add_subscription(&rec_msg, inp_index, tcp_clients, topics_cls_list);
+				// display_type_2_msg(&rec_msg);
 			} else if (rec_msg.type == '3') {
 				// Un client TCP a trimit o cerere de unsubscribe
 				display_type_3_msg(&rec_msg);
@@ -255,6 +321,7 @@ int main(int argc, char *argv[])
 	// Am initializat multimea de surse din care se poate citi
 	struct TCPClientsDB *tcp_clients = init_clients_db();
 	// Am initializat baza de date a clientilor
+	list topics_cls_list = NULL;
 	int chk_ret;
 	while (TRUE_VAL) {
 		memcpy(prev_inputs, inputs, FD_SET_SIZE);
@@ -275,7 +342,7 @@ int main(int argc, char *argv[])
 			if (FD_ISSET(i, prev_inputs)) {
 			// Serverul citeste informatii dintr-o anumita sursa
 				control_inp_srcs_tcp(inputs, &max_input_rank, i,
-								 tcp_sock_descr, udp_sock_descr, tcp_clients);
+								 tcp_sock_descr, udp_sock_descr, tcp_clients, &topics_cls_list);
 			}
 		}	
 	}

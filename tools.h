@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "list.h"
+#include "queue.h"
 
 #define MAX_PORT 65535
 #define MIN_PORT 1024
@@ -41,6 +42,8 @@ struct Client_info {
 	int socket;
 	uint16_t port;
 	uint32_t ip;
+	int sf;
+	queue prev_msgs;
 };
 
 struct TCPmsg {
@@ -56,7 +59,7 @@ struct UDPmsg {
 	char content[CONTENT_LEN];
 };
 
-struct topic_cls {
+struct topics_cls {
 	char topic[TOPIC_LEN];
 	list subs;
 };
