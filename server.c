@@ -30,7 +30,7 @@ void disconnect_all_cls(struct TCPClientsDB *tcp_clients, fd_set *inputs) {
 
 void duplicate_id(char *sock_id_corresp, int inp_index, 
 	struct TCPClientsDB *tcp_clients, fd_set *inputs) {
-	
+	// Un potential nou client se conecteaza cu ID-ul altui client deja conectat
 	printf("Client %s already connected\n", sock_id_corresp);
 	tcp_clients->cnt--;
 	char *response = calloc(PAYLOAD_LEN, CHAR_SIZE);
@@ -46,7 +46,7 @@ void duplicate_id(char *sock_id_corresp, int inp_index,
 
 uint32_t find_client_by_socket(int inp_index, 
 	struct TCPClientsDB *tcp_clients) {
-	
+	// Se cauta un anumit client dupa socket-ul TCP specific
 	uint32_t cl_index;
 	for (uint32_t i = 0; i < tcp_clients->cnt; i++) {
 		if (inp_index == tcp_clients->cls[i].socket) {
@@ -99,7 +99,7 @@ void print_topics_cls_list(list *topics_cls_list) {
 		printf("%s:", ((struct topics_cls *)curr->element)->topic);
 		list subbers = ((struct topics_cls *)curr->element)->subs;
 		while (subbers) {
-			printf("%s ", ((struct Client_info *)subbers->element)->id);
+			printf("%s %d|", ((struct Client_info *)subbers->element)->id, ((struct Client_info *)subbers->element)->sf);
 			subbers = subbers->next;
 		}
 		curr = curr->next;
@@ -146,8 +146,44 @@ void add_subscription(struct TCPmsg *rec_msg, int inp_index, struct TCPClientsDB
 			}
 		}
 	}
-	((struct topics_cls *)(curr->element))->subs = 
-		cons(&(tcp_clients->cls[cl_index]), ((struct topics_cls *)(curr->element))->subs);
+	// Se verifica daca la topicul respectiv clientul este deja abonat
+	// In acest caz, se schimba doar facilitatea de store-and-forward
+	list aux_subs = ((struct topics_cls *)(curr->element))->subs;
+	if (aux_subs == NULL) {
+		struct Subscription *new_subscription = malloc(sizeof(struct Subscription));
+		new_subscription->client = &(tcp_clients->cls[cl_index]);
+		new_subscription->sf = (int)(rec_msg->sf) - '0';
+		new_subscription->prev_msgs = NULL;
+		((struct topics_cls *)(curr->element))->subs = 
+			cons(&(tcp_clients->cls[cl_index]), ((struct topics_cls *)(curr->element))->subs);
+	} else {
+		list aux_subs_next = aux_subs->next;
+		while(aux_subs_next != NULL) {
+			if (!memcmp((((struct Subscription *)aux_subs->element)->client)->id,
+				rec_msg->client_id, strlen(rec_msg->client_id))) {
+				break;
+			}
+			aux_subs = aux_subs_next;
+			aux_subs_next = aux_subs->next;
+		}
+		if (aux_subs_next == NULL) {
+			if (memcmp((((struct Subscription *)aux_subs->element)->client)->id,
+				rec_msg->client_id, strlen(rec_msg->client_id))) {
+				
+				struct Subscription *new_subscription = malloc(sizeof(struct Subscription));
+				new_subscription->client = &(tcp_clients->cls[cl_index]);
+				new_subscription->sf = (int)(rec_msg->sf) - '0';
+				new_subscription->prev_msgs = NULL;
+				((struct topics_cls *)(curr->element))->subs = 
+				cons(&(tcp_clients->cls[cl_index]), ((struct topics_cls *)(curr->element))->subs);
+			} else {
+				((struct Subscription *)aux_subs->element)->sf = (int)(rec_msg->sf) - '0';
+			}
+		} else {
+			((struct Subscription *)aux_subs->element)->sf = (int)(rec_msg->sf) - '0';
+			// NU UITA SA MODIFICI LA PRINT
+		}
+	}
 	print_topics_cls_list(topics_cls_list);
 }
 
@@ -218,7 +254,6 @@ void control_inp_srcs_tcp(fd_set *inputs,
 			} else if (rec_msg.type == '2') {
 				// Un client TCP a trimis o cerere de subscribe
 				add_subscription(&rec_msg, inp_index, tcp_clients, topics_cls_list);
-				// display_type_2_msg(&rec_msg);
 			} else if (rec_msg.type == '3') {
 				// Un client TCP a trimit o cerere de unsubscribe
 				display_type_3_msg(&rec_msg);
