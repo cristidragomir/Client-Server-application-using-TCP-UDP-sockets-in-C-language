@@ -42,6 +42,7 @@ struct Client_info {
 	int socket;
 	uint16_t port;
 	uint32_t ip;
+	queue prev_msgs;
 };
 
 struct TCPmsg {
@@ -65,8 +66,7 @@ struct topics_cls {
 struct Subscription{
 	struct Client_info *client;
 	int sf;
-	queue prev_msgs;
-}
+};
 
 void disable_neagle_algorithm(int socket);
 struct TCPClientsDB *init_clients_db();

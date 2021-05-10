@@ -99,7 +99,7 @@ void print_topics_cls_list(list *topics_cls_list) {
 		printf("%s:", ((struct topics_cls *)curr->element)->topic);
 		list subbers = ((struct topics_cls *)curr->element)->subs;
 		while (subbers) {
-			printf("%s %d|", ((struct Client_info *)subbers->element)->id, ((struct Client_info *)subbers->element)->sf);
+			printf("%s %d|", ((struct Subscription *)subbers->element)->client->id, ((struct Subscription *)subbers->element)->sf);
 			subbers = subbers->next;
 		}
 		curr = curr->next;
@@ -108,28 +108,25 @@ void print_topics_cls_list(list *topics_cls_list) {
 	printf("\n");
 }
 
-void add_subscription(struct TCPmsg *rec_msg, int inp_index, struct TCPClientsDB *tcp_clients,
-	list *topics_cls_list) {
-	// Adaugam la tabela de dispersie, la o anumita cheie(nume topic), un nou client(struct Client_info)
-	uint32_t cl_index = find_client_by_socket(inp_index, tcp_clients);
-	list curr, next_el;
-	curr = *topics_cls_list;
+void find_topic(struct TCPmsg *rec_msg, list *topics_cls_list, list *curr, list *topics_cls_list) {
+	*curr = *topics_cls_list;
+	list next_el;
 	if (curr == NULL) {
 		*topics_cls_list = cons(malloc(sizeof(struct topics_cls)), *topics_cls_list);
-		curr = *topics_cls_list;
-		((struct topics_cls *)(curr->element))->subs = NULL;
-		memcpy(((struct topics_cls *)(curr->element))->topic,
+		*curr = *topics_cls_list;
+		((struct topics_cls *)((*curr)->element))->subs = NULL;
+		memcpy(((struct topics_cls *)((*curr)->element))->topic,
 			rec_msg->topic_to_sub_unsub, 
 			strlen(rec_msg->topic_to_sub_unsub) + 1);
 	} else {
-		next_el = curr->next;
+		next_el = (*curr)->next;
 		while (next_el != NULL) {
-			if (!memcmp(((struct topics_cls *)(curr->element))->topic, 
+			if (!memcmp(((struct topics_cls *)((*curr)->element))->topic, 
 				rec_msg->topic_to_sub_unsub, 
 				strlen(rec_msg->topic_to_sub_unsub))) {
 				break;
 			}
-			curr = next_el;
+			*curr = next_el;
 			next_el = next_el->next;
 		}
 		if (next_el == NULL) {
@@ -138,7 +135,7 @@ void add_subscription(struct TCPmsg *rec_msg, int inp_index, struct TCPClientsDB
 				strlen(rec_msg->topic_to_sub_unsub))) {
 				// Trebuie creat un nou topic la care clientii se pot abona
 				*topics_cls_list = cons(malloc(sizeof(struct topics_cls)), *topics_cls_list);
-				curr = *topics_cls_list;
+				*curr = *topics_cls_list;
 				((struct topics_cls *)(curr->element))->subs = NULL;
 				memcpy(((struct topics_cls *)(curr->element))->topic,
 					rec_msg->topic_to_sub_unsub,
@@ -146,6 +143,21 @@ void add_subscription(struct TCPmsg *rec_msg, int inp_index, struct TCPClientsDB
 			}
 		}
 	}
+}
+
+void remove_subscription(struct TCPmsg *rec_msg, int inp_index,
+	struct TCPClientsDB *tcp_clients) {
+	// Stergem o anumita intrare din tabela de dispersie
+	uint32_t cl_index = find_client_by_socket(inp_index, tcp_clients);
+	list curr, next_el;
+}
+
+void add_subscription(struct TCPmsg *rec_msg, int inp_index, 
+	struct TCPClientsDB *tcp_clients, list *topics_cls_list) {
+	// Adaugam la tabela de dispersie, la o anumita cheie(nume topic), un nou client(struct Client_info)
+	uint32_t cl_index = find_client_by_socket(inp_index, tcp_clients);
+	list curr, next_el;
+	find_topic()
 	// Se verifica daca la topicul respectiv clientul este deja abonat
 	// In acest caz, se schimba doar facilitatea de store-and-forward
 	list aux_subs = ((struct topics_cls *)(curr->element))->subs;
@@ -153,14 +165,14 @@ void add_subscription(struct TCPmsg *rec_msg, int inp_index, struct TCPClientsDB
 		struct Subscription *new_subscription = malloc(sizeof(struct Subscription));
 		new_subscription->client = &(tcp_clients->cls[cl_index]);
 		new_subscription->sf = (int)(rec_msg->sf) - '0';
-		new_subscription->prev_msgs = NULL;
+		new_subscription->client->prev_msgs = NULL;
 		((struct topics_cls *)(curr->element))->subs = 
-			cons(&(tcp_clients->cls[cl_index]), ((struct topics_cls *)(curr->element))->subs);
+			cons(new_subscription, ((struct topics_cls *)(curr->element))->subs);
 	} else {
 		list aux_subs_next = aux_subs->next;
 		while(aux_subs_next != NULL) {
 			if (!memcmp((((struct Subscription *)aux_subs->element)->client)->id,
-				rec_msg->client_id, strlen(rec_msg->client_id))) {
+				tcp_clients->cls[cl_index].id, strlen(tcp_clients->cls[cl_index].id))) {
 				break;
 			}
 			aux_subs = aux_subs_next;
@@ -168,20 +180,19 @@ void add_subscription(struct TCPmsg *rec_msg, int inp_index, struct TCPClientsDB
 		}
 		if (aux_subs_next == NULL) {
 			if (memcmp((((struct Subscription *)aux_subs->element)->client)->id,
-				rec_msg->client_id, strlen(rec_msg->client_id))) {
+				tcp_clients->cls[cl_index].id, strlen(tcp_clients->cls[cl_index].id))) {
 				
 				struct Subscription *new_subscription = malloc(sizeof(struct Subscription));
 				new_subscription->client = &(tcp_clients->cls[cl_index]);
 				new_subscription->sf = (int)(rec_msg->sf) - '0';
-				new_subscription->prev_msgs = NULL;
+				new_subscription->client->prev_msgs = NULL;
 				((struct topics_cls *)(curr->element))->subs = 
-				cons(&(tcp_clients->cls[cl_index]), ((struct topics_cls *)(curr->element))->subs);
+					cons(new_subscription, ((struct topics_cls *)(curr->element))->subs);
 			} else {
 				((struct Subscription *)aux_subs->element)->sf = (int)(rec_msg->sf) - '0';
 			}
 		} else {
 			((struct Subscription *)aux_subs->element)->sf = (int)(rec_msg->sf) - '0';
-			// NU UITA SA MODIFICI LA PRINT
 		}
 	}
 	print_topics_cls_list(topics_cls_list);
@@ -313,7 +324,7 @@ void configure_server_udp(int *udp_sock_descr, char *port_arg) {
 
 void configure_fd_sets(int socket1, int socket2, fd_set **inputs,
 	fd_set **prev_inputs, int *max_input_rank) {
-	
+	// Se configureaza multimea de descriptori de input
 	*inputs = malloc(FD_SET_SIZE);
 	DIE(*inputs == NULL, "Eroare alocare memorie");
 	*prev_inputs = malloc(FD_SET_SIZE);
@@ -332,6 +343,7 @@ void configure_fd_sets(int socket1, int socket2, fd_set **inputs,
 
 void free_mem(struct TCPClientsDB *tcp_clients,
 	fd_set *inputs, fd_set *prev_inputs, int tcp_sock_descr,
+	// Se elibereaza resursele utilizate de program
 	int udp_sock_descr) {
 	free(tcp_clients->cls);
 	free(tcp_clients);
@@ -339,7 +351,6 @@ void free_mem(struct TCPClientsDB *tcp_clients,
 	free(prev_inputs);
 	close(tcp_sock_descr);
 	close(udp_sock_descr);
-	// Se elibereaza resursele utilizate de program
 }
 
 int main(int argc, char *argv[])
