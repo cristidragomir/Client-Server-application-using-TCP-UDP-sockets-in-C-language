@@ -65,8 +65,8 @@ void recv_cl_id(int inp_index, struct TCPClientsDB *tcp_clients,
 	// Se preia id-ul trimis in buffer
 	uint32_t cl_id_len = strlen(sock_id_corresp);
 	for (uint32_t i = 0; i < tcp_clients->cnt; i++) {
-		if (cl_index != i && 
-			memcmp(tcp_clients->cls[i].id, sock_id_corresp, cl_id_len) == 0) {
+		if (cl_index != i && cl_id_len == strlen(tcp_clients->cls[i].id) &&
+			!memcmp(tcp_clients->cls[i].id, sock_id_corresp, cl_id_len)) {
 			if (tcp_clients->cls[i].is_connected == '1') {
 				// Un alt client incearca sa se conecteze cu acelasi ID
 				// al altui client deja conectat
@@ -108,10 +108,13 @@ void print_topics_cls_list(list *topics_cls_list) {
 	printf("\n");
 }
 
-void find_topic(struct TCPmsg *rec_msg, list *topics_cls_list, list *curr, list *topics_cls_list) {
+int find_topic(struct TCPmsg *rec_msg, list *topics_cls_list, list *curr, char sub_unsub) {
 	*curr = *topics_cls_list;
 	list next_el;
-	if (curr == NULL) {
+	if (*curr == NULL) {
+		if (sub_unsub == '1') {
+			return -1;
+		}
 		*topics_cls_list = cons(malloc(sizeof(struct topics_cls)), *topics_cls_list);
 		*curr = *topics_cls_list;
 		((struct topics_cls *)((*curr)->element))->subs = NULL;
@@ -121,7 +124,9 @@ void find_topic(struct TCPmsg *rec_msg, list *topics_cls_list, list *curr, list 
 	} else {
 		next_el = (*curr)->next;
 		while (next_el != NULL) {
-			if (!memcmp(((struct topics_cls *)((*curr)->element))->topic, 
+			if (strlen(((struct topics_cls *)((*curr)->element))->topic) == 
+				strlen(rec_msg->topic_to_sub_unsub) &&
+				!memcmp(((struct topics_cls *)((*curr)->element))->topic, 
 				rec_msg->topic_to_sub_unsub, 
 				strlen(rec_msg->topic_to_sub_unsub))) {
 				break;
@@ -130,34 +135,77 @@ void find_topic(struct TCPmsg *rec_msg, list *topics_cls_list, list *curr, list 
 			next_el = next_el->next;
 		}
 		if (next_el == NULL) {
-			if (memcmp(((struct topics_cls *)(curr->element))->topic, 
+			if (strlen(((struct topics_cls *)((*curr)->element))->topic) != 
+				strlen(rec_msg->topic_to_sub_unsub) ||
+				memcmp(((struct topics_cls *)((*curr)->element))->topic, 
 				rec_msg->topic_to_sub_unsub, 
 				strlen(rec_msg->topic_to_sub_unsub))) {
 				// Trebuie creat un nou topic la care clientii se pot abona
+				if (sub_unsub == '1') {
+					return -1;
+				}
 				*topics_cls_list = cons(malloc(sizeof(struct topics_cls)), *topics_cls_list);
 				*curr = *topics_cls_list;
-				((struct topics_cls *)(curr->element))->subs = NULL;
-				memcpy(((struct topics_cls *)(curr->element))->topic,
+				((struct topics_cls *)((*curr)->element))->subs = NULL;
+				memcpy(((struct topics_cls *)((*curr)->element))->topic,
 					rec_msg->topic_to_sub_unsub,
 					strlen(rec_msg->topic_to_sub_unsub) + 1);
 			}
 		}
 	}
+	return 1;
 }
 
-void remove_subscription(struct TCPmsg *rec_msg, int inp_index,
-	struct TCPClientsDB *tcp_clients) {
+void remove_subscription(struct TCPmsg *rec_msg, int inp_index, 
+	struct TCPClientsDB *tcp_clients, list *topics_cls_list) {
 	// Stergem o anumita intrare din tabela de dispersie
 	uint32_t cl_index = find_client_by_socket(inp_index, tcp_clients);
-	list curr, next_el;
+	list curr;
+	int chk_func = find_topic(rec_msg, topics_cls_list, &curr, '1');
+	if (chk_func == -1) {
+		printf("Topicul de la care se doreste dezabonarea nu a fost gasit!\n");
+		return;
+	}
+	list prev, act_sub;
+	// act_sub - pointer catre o structura ce defineste abonamentul actual evaluat in lista
+	prev = act_sub = ((struct topics_cls *)curr->element)->subs;
+	while (act_sub->next != NULL) {
+		if (strlen((((struct Subscription *)act_sub->element)->client)->id) == 
+			strlen(tcp_clients->cls[cl_index].id) &&
+			!memcmp((((struct Subscription *)act_sub->element)->client)->id,
+			tcp_clients->cls[cl_index].id, strlen(tcp_clients->cls[cl_index].id))) {
+			break;
+		}
+		prev = act_sub;
+		act_sub = act_sub->next;
+	}
+	if (act_sub->next == NULL) {
+		if (strlen((((struct Subscription *)act_sub->element)->client)->id) != 
+			strlen(tcp_clients->cls[cl_index].id) ||
+			memcmp((((struct Subscription *)act_sub->element)->client)->id, 
+			tcp_clients->cls[cl_index].id, strlen(tcp_clients->cls[cl_index].id))) {
+			printf("Clientul nu este abonat la acest topic!\n");
+			return;
+		}
+	}
+	if (prev == act_sub) {
+		((struct topics_cls *)curr->element)->subs = act_sub->next;
+	} else {
+		prev->next = act_sub->next;
+	}
+	free(act_sub);
+	print_topics_cls_list(topics_cls_list);
 }
 
 void add_subscription(struct TCPmsg *rec_msg, int inp_index, 
 	struct TCPClientsDB *tcp_clients, list *topics_cls_list) {
-	// Adaugam la tabela de dispersie, la o anumita cheie(nume topic), un nou client(struct Client_info)
+	// Adaugam la tabela de dispersie, la o anumita cheie(nume topic),
+	// un nou client(struct Client_info)
 	uint32_t cl_index = find_client_by_socket(inp_index, tcp_clients);
-	list curr, next_el;
-	find_topic()
+	list curr;
+	// Incercam sa cautam topicul sau sa adaugam inca o intrare in lista
+	// de chei din tabela de dispersie
+	find_topic(rec_msg, topics_cls_list, &curr, '0');
 	// Se verifica daca la topicul respectiv clientul este deja abonat
 	// In acest caz, se schimba doar facilitatea de store-and-forward
 	list aux_subs = ((struct topics_cls *)(curr->element))->subs;
@@ -171,7 +219,9 @@ void add_subscription(struct TCPmsg *rec_msg, int inp_index,
 	} else {
 		list aux_subs_next = aux_subs->next;
 		while(aux_subs_next != NULL) {
-			if (!memcmp((((struct Subscription *)aux_subs->element)->client)->id,
+			if (strlen((((struct Subscription *)aux_subs->element)->client)->id) == 
+				strlen(tcp_clients->cls[cl_index].id) &&
+				!memcmp((((struct Subscription *)aux_subs->element)->client)->id,
 				tcp_clients->cls[cl_index].id, strlen(tcp_clients->cls[cl_index].id))) {
 				break;
 			}
@@ -179,7 +229,9 @@ void add_subscription(struct TCPmsg *rec_msg, int inp_index,
 			aux_subs_next = aux_subs->next;
 		}
 		if (aux_subs_next == NULL) {
-			if (memcmp((((struct Subscription *)aux_subs->element)->client)->id,
+			if (strlen((((struct Subscription *)aux_subs->element)->client)->id) != 
+				strlen(tcp_clients->cls[cl_index].id) ||
+				memcmp((((struct Subscription *)aux_subs->element)->client)->id,
 				tcp_clients->cls[cl_index].id, strlen(tcp_clients->cls[cl_index].id))) {
 				
 				struct Subscription *new_subscription = malloc(sizeof(struct Subscription));
@@ -267,7 +319,7 @@ void control_inp_srcs_tcp(fd_set *inputs,
 				add_subscription(&rec_msg, inp_index, tcp_clients, topics_cls_list);
 			} else if (rec_msg.type == '3') {
 				// Un client TCP a trimit o cerere de unsubscribe
-				display_type_3_msg(&rec_msg);
+				remove_subscription(&rec_msg, inp_index, tcp_clients, topics_cls_list);
 			}
 		}
 	}

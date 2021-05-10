@@ -37,15 +37,18 @@ int parse_message_tcp(struct TCPmsg *msg_recv, char *buffer) {
 		return 1;
 		// S-a procesat un mesaj TCP in care clientul isi trimite propriul ID
 	} else if (msg_recv->type == '2') {
+		// S-a procesat un mesaj TCP de subscribe
 		uint32_t actual_topic_len = strlen(buffer + CHAR_SIZE);
 		memcpy(msg_recv->topic_to_sub_unsub, buffer + CHAR_SIZE, actual_topic_len + 1);
 		memcpy(&msg_recv->sf, buffer + CHAR_SIZE + TOPIC_LEN, CHAR_SIZE);
 		return 1;
 	} else if (msg_recv->type == '3') {
+		// S-a procesat un mesaj TCP de unsubscribe
 		uint32_t actual_topic_len = strlen(buffer + CHAR_SIZE);
 		memcpy(msg_recv->topic_to_sub_unsub, buffer + CHAR_SIZE, actual_topic_len + 1);
 		return 1;
 	} else if (msg_recv->type == 'E') {
+		// Un client s-a deconectat
 		return 1;
 	}
 	return -1;
