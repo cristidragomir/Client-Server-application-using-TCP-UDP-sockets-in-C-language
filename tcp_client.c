@@ -10,6 +10,7 @@
 #include "tools.h"
 
 void send_tcp_msg(int to_send_sock, struct TCPmsg *tcp_msg) {
+	// Se trimite un mesaj TCP catre un client TCP
 	int chk_func;
 	char *buffer = calloc(PAYLOAD_LEN, CHAR_SIZE);
 	memcpy(buffer, &(tcp_msg->type), CHAR_SIZE);
@@ -23,6 +24,7 @@ void send_tcp_msg(int to_send_sock, struct TCPmsg *tcp_msg) {
 			break;
 		case '3':
 			memcpy(buffer + CHAR_SIZE, tcp_msg->topic_to_sub_unsub, TOPIC_LEN);
+			break;
 	}
 	chk_func = send(to_send_sock, buffer, PAYLOAD_LEN, 0);
 	DIE(chk_func < 0, "Eroare trimitere informatii");
@@ -97,6 +99,10 @@ int read_server(int socket) {
 	DIE(parse_message_tcp(&rec_msg, buffer) < 0, "Eroare parsare buffer");
 	if (rec_msg.type == 'E') {
 		return EXIT_CODE;
+	} else {
+		struct UDPmsg recv_msg;
+		DIE(parse_message_udp(&recv_msg, rec_msg.buffer) < 0, "Eroare parsare mesaj");
+		display_udp_msg(&recv_msg, &(rec_msg.sender_info));
 	}
 	free(buffer);
 	return 0;

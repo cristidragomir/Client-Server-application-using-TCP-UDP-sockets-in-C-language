@@ -211,6 +211,7 @@ void add_subscription(struct TCPmsg *rec_msg, int inp_index,
 	list aux_subs = ((struct topics_cls *)(curr->element))->subs;
 	if (aux_subs == NULL) {
 		struct Subscription *new_subscription = malloc(sizeof(struct Subscription));
+		DIE(new_subscription == NULL, "Eroare alocare memorie");
 		new_subscription->client = &(tcp_clients->cls[cl_index]);
 		new_subscription->sf = (int)(rec_msg->sf) - '0';
 		new_subscription->client->prev_msgs = NULL;
@@ -235,6 +236,7 @@ void add_subscription(struct TCPmsg *rec_msg, int inp_index,
 				tcp_clients->cls[cl_index].id, strlen(tcp_clients->cls[cl_index].id))) {
 				
 				struct Subscription *new_subscription = malloc(sizeof(struct Subscription));
+				DIE(new_subscription == NULL, "Eroare alocare memorie");
 				new_subscription->client = &(tcp_clients->cls[cl_index]);
 				new_subscription->sf = (int)(rec_msg->sf) - '0';
 				new_subscription->client->prev_msgs = NULL;
@@ -250,13 +252,43 @@ void add_subscription(struct TCPmsg *rec_msg, int inp_index,
 	print_topics_cls_list(topics_cls_list);
 }
 
-void control_inp_srcs_tcp(fd_set *inputs, 
-	int *max_input_rank, int inp_index, 
+void share_udp_msg(char *to_share, struct UDPmsg *recv_msg, 
+	list *topics_cls_list) {
+	list curr;
+	struct TCPmsg aux;
+	memcpy(aux.topic_to_sub_unsub, recv_msg->topic, strlen(recv_msg->topic) + 1);
+	int chk_func = find_topic(&aux, topics_cls_list, &curr, '1');
+	if (chk_func == -1) {
+		printf("Topicul la care s-a primit mesaj UDP nu contine abonati!\n");
+		return;
+	}
+	list subber = ((struct topics_cls *)curr->element)->subs;
+	while (subber) {
+		struct Client_info *curr_client;
+		curr_client = ((struct Subscription *)subber->element)->client;
+		if (curr_client->is_connected == '1') {
+			chk_func = send(curr_client->socket, to_share, PAYLOAD_LEN, 0);
+			DIE(chk_func < 0, "Eroare trimitere informatii");
+		} else {
+			if (curr_client->prev_msgs == NULL) {
+				curr_client->prev_msgs = queue_create();
+			}
+			char *to_share_copy = malloc(PAYLOAD_LEN * CHAR_SIZE);
+			DIE(to_share_copy == NULL, "Eroare alocare memorie");
+			memcpy(to_share_copy, to_share, PAYLOAD_LEN * CHAR_SIZE);
+			queue_enq(curr_client->prev_msgs, to_share_copy);
+		}
+		subber = subber->next;
+	}
+}
+
+void control_inp_srcs_tcp(fd_set *inputs, int *max_input_rank, int inp_index,
 	int server_tcp_socket, int server_udp_socket, 
 	struct TCPClientsDB *tcp_clients, list *topics_cls_list) {
 
 	int new_sock, chk_func;
 	char *buffer = calloc(PAYLOAD_LEN, CHAR_SIZE);
+	DIE (buffer == NULL, "Eroare alocare memorie");
 	struct sockaddr_in *incoming_client = malloc(SOCKADDR_IN_SIZE);
 	DIE(incoming_client == NULL, "Eroare alocare memorie");
 	if (inp_index == server_tcp_socket) {
@@ -283,12 +315,25 @@ void control_inp_srcs_tcp(fd_set *inputs,
 	} else if (inp_index == server_udp_socket) {
 		// In acest caz se primesc informatii de la clientii UDP
 		struct sockaddr_in sender_details;
+		char *to_share = malloc(PAYLOAD_LEN * CHAR_SIZE);
+		DIE(to_share == NULL, "Eroare alocare memorie");
 		unsigned int *sender_details_len = malloc(sizeof(unsigned int));
+		DIE(sender_details_len == NULL, "Eroare alocare memorie");
 		chk_func = recvfrom(inp_index, buffer, PAYLOAD_LEN, 0,
 			(struct sockaddr *) &sender_details, sender_details_len);
+		to_share[0] = '4';
+		memcpy(to_share + CHAR_SIZE, buffer, TOPIC_LEN + CHAR_SIZE + CONTENT_LEN);
+		memcpy(to_share + CHAR_SIZE + TOPIC_LEN + CHAR_SIZE + CONTENT_LEN,
+			&sender_details.sin_addr.s_addr, 4 * CHAR_SIZE);
+		memcpy(to_share + CHAR_SIZE + TOPIC_LEN + CHAR_SIZE + CONTENT_LEN + 4 * CHAR_SIZE, 
+			&sender_details.sin_port, 2 * CHAR_SIZE);
 		struct UDPmsg recv_msg;
 		DIE(parse_message_udp(&recv_msg, buffer) < 0, "Eroare parsare mesaj");
+		share_udp_msg(to_share, &recv_msg, topics_cls_list);
+		printf("SERVER-SIDE UDP\n");
 		display_udp_msg(&recv_msg, &sender_details);
+		printf("-----------------\n");
+		return;
 	} else {
 		// De la o conexiune deja stabilita primim informatii
 		chk_func = recv(inp_index, buffer, PAYLOAD_LEN, 0);
@@ -395,8 +440,8 @@ void configure_fd_sets(int socket1, int socket2, fd_set **inputs,
 
 void free_mem(struct TCPClientsDB *tcp_clients,
 	fd_set *inputs, fd_set *prev_inputs, int tcp_sock_descr,
-	// Se elibereaza resursele utilizate de program
 	int udp_sock_descr) {
+	// Se elibereaza resursele utilizate de program
 	free(tcp_clients->cls);
 	free(tcp_clients);
 	free(inputs);
@@ -429,6 +474,7 @@ int main(int argc, char *argv[])
 		if (FD_ISSET(0, prev_inputs)) {
 			// Serverul citeste informatii de la tastatura
 			char *buffer = calloc(PAYLOAD_LEN, CHAR_SIZE);
+			DIE(buffer == NULL, "Eroare alocare memorie");
 			fgets(buffer, PAYLOAD_LEN - 1, stdin);
 			if (strncmp(buffer, "exit", 4) == 0) {
 				disconnect_all_cls(tcp_clients, inputs);
@@ -440,7 +486,8 @@ int main(int argc, char *argv[])
 			if (FD_ISSET(i, prev_inputs)) {
 			// Serverul citeste informatii dintr-o anumita sursa
 				control_inp_srcs_tcp(inputs, &max_input_rank, i,
-								 tcp_sock_descr, udp_sock_descr, tcp_clients, &topics_cls_list);
+								tcp_sock_descr, udp_sock_descr, tcp_clients, 
+								&topics_cls_list);
 			}
 		}	
 	}

@@ -47,6 +47,12 @@ int parse_message_tcp(struct TCPmsg *msg_recv, char *buffer) {
 		uint32_t actual_topic_len = strlen(buffer + CHAR_SIZE);
 		memcpy(msg_recv->topic_to_sub_unsub, buffer + CHAR_SIZE, actual_topic_len + 1);
 		return 1;
+	} else if (msg_recv->type == '4') {
+		memcpy(msg_recv->buffer, buffer + CHAR_SIZE, TOPIC_LEN + CHAR_SIZE + CONTENT_LEN);
+		memcpy(&(msg_recv->sender_info.sin_addr.s_addr), buffer + PAYLOAD_LEN - 6 * CHAR_SIZE, 4 * CHAR_SIZE);
+		memcpy(&(msg_recv->sender_info.sin_port), 
+			buffer + PAYLOAD_LEN - 2 * CHAR_SIZE, 2 * CHAR_SIZE);
+		return 1;
 	} else if (msg_recv->type == 'E') {
 		// Un client s-a deconectat
 		return 1;

@@ -12,8 +12,9 @@
 #define TRUE_VAL 1
 #define ID_CLIENT_LEN 11
 #define INIT_CLIENTS_NUM 32
-#define PAYLOAD_LEN 1552
-// 51 + 1 + 1501 - pentru UDP
+#define PAYLOAD_LEN 1560
+// 1 + 51 + 1 + 1501 + 4 + 2
+// pentru transmiterea unui mesaj UDP la un client TCP
 #define TOPIC_LEN 51
 #define CONTENT_LEN 1501
 #define CHAR_SIZE sizeof(char)
@@ -50,6 +51,8 @@ struct TCPmsg {
 	char client_id[ID_CLIENT_LEN];
 	char topic_to_sub_unsub[TOPIC_LEN];
 	char sf;
+	char buffer[PAYLOAD_LEN];
+	struct sockaddr_in sender_info;
 };
 
 struct UDPmsg {
