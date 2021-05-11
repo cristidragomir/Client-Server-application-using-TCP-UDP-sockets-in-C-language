@@ -185,5 +185,4 @@ void display_udp_msg(struct UDPmsg *recv_msg, struct sockaddr_in *sender_details
 			printf("STRING - %s\n", recv_msg->content);
 			break;
 	}
-	printf("\n");
 }

@@ -31,7 +31,7 @@ void disconnect_all_cls(struct TCPClientsDB *tcp_clients, fd_set *inputs) {
 void duplicate_id(char *sock_id_corresp, int inp_index, 
 	struct TCPClientsDB *tcp_clients, fd_set *inputs) {
 	// Un potential nou client se conecteaza cu ID-ul altui client deja conectat
-	printf("Client %s already connected\n", sock_id_corresp);
+	printf("Client %s already connected.\n", sock_id_corresp);
 	tcp_clients->cnt--;
 	char *response = calloc(PAYLOAD_LEN, CHAR_SIZE);
 	DIE(response == NULL, "Eroare alocare memorie");
@@ -79,6 +79,17 @@ void recv_cl_id(int inp_index, struct TCPClientsDB *tcp_clients,
 				tcp_clients->cls[i].socket = inp_index;
 				tcp_clients->cls[i].port = tcp_clients->cls[cl_index].port;
 				tcp_clients->cls[i].ip = tcp_clients->cls[cl_index].ip;
+				while(tcp_clients->cls[i].prev_msgs != NULL && 
+					!queue_empty(tcp_clients->cls[i].prev_msgs)) {
+					char *prev_buff = queue_deq(tcp_clients->cls[i].prev_msgs);
+					int chk_func = send(tcp_clients->cls[i].socket, prev_buff, PAYLOAD_LEN, 0);
+					DIE(chk_func < 0, "Eroare trimitere informatii");
+				}
+				tcp_clients->cls[i].prev_msgs = NULL;
+				struct in_addr aux;
+				aux.s_addr = tcp_clients->cls[i].ip;
+				printf("New client %s connected from %s:%hu.\n", tcp_clients->cls[i].id, 
+					inet_ntoa(aux), ntohs(tcp_clients->cls[i].port));
 			}
 			return;
 		}
@@ -88,7 +99,7 @@ void recv_cl_id(int inp_index, struct TCPClientsDB *tcp_clients,
 	tcp_clients->cls[cl_index].id[cl_id_len] = '\0';
 	struct in_addr aux;
 	aux.s_addr = tcp_clients->cls[cl_index].ip;
-	printf("New client %s connected from %s:%hu\n", tcp_clients->cls[cl_index].id, 
+	printf("New client %s connected from %s:%hu.\n", tcp_clients->cls[cl_index].id, 
 		inet_ntoa(aux), ntohs(tcp_clients->cls[cl_index].port));
 	// Se afiseaza detaliile de conectare
 }
@@ -163,7 +174,9 @@ void remove_subscription(struct TCPmsg *rec_msg, int inp_index,
 	list curr;
 	int chk_func = find_topic(rec_msg, topics_cls_list, &curr, '1');
 	if (chk_func == -1) {
+		#if 0
 		printf("Topicul de la care se doreste dezabonarea nu a fost gasit!\n");
+		#endif
 		return;
 	}
 	list prev, act_sub;
@@ -184,7 +197,9 @@ void remove_subscription(struct TCPmsg *rec_msg, int inp_index,
 			strlen(tcp_clients->cls[cl_index].id) ||
 			memcmp((((struct Subscription *)act_sub->element)->client)->id, 
 			tcp_clients->cls[cl_index].id, strlen(tcp_clients->cls[cl_index].id))) {
+			#if 0
 			printf("Clientul nu este abonat la acest topic!\n");
+			#endif
 			return;
 		}
 	}
@@ -194,7 +209,9 @@ void remove_subscription(struct TCPmsg *rec_msg, int inp_index,
 		prev->next = act_sub->next;
 	}
 	free(act_sub);
+	#if 0
 	print_topics_cls_list(topics_cls_list);
+	#endif
 }
 
 void add_subscription(struct TCPmsg *rec_msg, int inp_index, 
@@ -249,7 +266,9 @@ void add_subscription(struct TCPmsg *rec_msg, int inp_index,
 			((struct Subscription *)aux_subs->element)->sf = (int)(rec_msg->sf) - '0';
 		}
 	}
+	#if 0
 	print_topics_cls_list(topics_cls_list);
+	#endif
 }
 
 void share_udp_msg(char *to_share, struct UDPmsg *recv_msg, 
@@ -259,7 +278,9 @@ void share_udp_msg(char *to_share, struct UDPmsg *recv_msg,
 	memcpy(aux.topic_to_sub_unsub, recv_msg->topic, strlen(recv_msg->topic) + 1);
 	int chk_func = find_topic(&aux, topics_cls_list, &curr, '1');
 	if (chk_func == -1) {
+		#if 0
 		printf("Topicul la care s-a primit mesaj UDP nu contine abonati!\n");
+		#endif
 		return;
 	}
 	list subber = ((struct topics_cls *)curr->element)->subs;
@@ -269,7 +290,8 @@ void share_udp_msg(char *to_share, struct UDPmsg *recv_msg,
 		if (curr_client->is_connected == '1') {
 			chk_func = send(curr_client->socket, to_share, PAYLOAD_LEN, 0);
 			DIE(chk_func < 0, "Eroare trimitere informatii");
-		} else {
+		} else if(curr_client->is_connected == '0' 
+			&& ((struct Subscription *)subber->element)->sf == 1) {
 			if (curr_client->prev_msgs == NULL) {
 				curr_client->prev_msgs = queue_create();
 			}
@@ -330,9 +352,6 @@ void control_inp_srcs_tcp(fd_set *inputs, int *max_input_rank, int inp_index,
 		struct UDPmsg recv_msg;
 		DIE(parse_message_udp(&recv_msg, buffer) < 0, "Eroare parsare mesaj");
 		share_udp_msg(to_share, &recv_msg, topics_cls_list);
-		printf("SERVER-SIDE UDP\n");
-		display_udp_msg(&recv_msg, &sender_details);
-		printf("-----------------\n");
 		return;
 	} else {
 		// De la o conexiune deja stabilita primim informatii
@@ -347,7 +366,7 @@ void control_inp_srcs_tcp(fd_set *inputs, int *max_input_rank, int inp_index,
 					break;
 				}
 			}
-			printf("Client %s disconnected\n", tcp_clients->cls[cl_index].id);
+			printf("Client %s disconnected.\n", tcp_clients->cls[cl_index].id);
 			tcp_clients->cls[cl_index].socket = -1;
 			tcp_clients->cls[cl_index].is_connected = '0';
 			close(inp_index);

@@ -43,10 +43,8 @@ void send_client_id(int to_send_sock, char *client_id) {
 uint32_t set_msg_topic(struct TCPmsg *tcp_msg, char *relevant_info, char sep) {
 	uint32_t actual_topic_len = 0;
 	while (relevant_info[actual_topic_len] != sep) {
-		printf("%c", relevant_info[actual_topic_len]);
 		actual_topic_len++;
 	}
-	printf("\n");
 	DIE(actual_topic_len > 50, "Topic de lungime > 50");
 	memcpy(tcp_msg->topic_to_sub_unsub, relevant_info, actual_topic_len);
 	tcp_msg->topic_to_sub_unsub[actual_topic_len] = '\0';
@@ -82,9 +80,11 @@ int read_stdin(int to_send_sock) {
 	} else if (!strncmp(buffer, "subscribe", strlen("subscribe"))) {
 		// User-ul a dat comanda de abonare la un topic
 		send_subscribe_req(to_send_sock, buffer + strlen("subscribe") + 1);
+		printf("Subscribed to topic.\n");
 	} else if (!strncmp(buffer, "unsubscribe", strlen("unsubscribe"))) {
 		// User-ul a dat comanda de dezabonare de la un topic
 		send_unsub_req(to_send_sock, buffer + strlen("unsubscribe") + 1);
+		printf("Unsubscribed from topic.\n");
 	}
 	free(buffer);
 	return 0;
