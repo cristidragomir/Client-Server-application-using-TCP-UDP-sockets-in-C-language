@@ -142,3 +142,6 @@ functia display_udp_msg() din acelasi fisier sursa mentionat.
 
 In header-ul tools.h s-au definit anumite macro-uri, structurile de date
 mentionate si antetul anumitor functii.
+
+Pentru structura de date Lista si Coada s-au folosit fisierele sursa:
+list.c, list.h, queue.c, queue.h din scheletul Temei 1.
